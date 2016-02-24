@@ -1,16 +1,20 @@
 <%-
-  def extract_attributes(schema, properties)
-    attributes = []
+  def extract_attributes(schema, properties, required)
 
+    attributes = []
     _, properties = schema.dereference(properties)
 
     properties.each do |key, value|
       # found a reference to another element:
       _, value = schema.dereference(value)
+      # check if property is required
+      if required.is_a?(Array)
+        requiredProperty = required.include?(key) ? 'x' : ''
+      end
 
       # include top level reference to nested things, when top level is nullable
       if value.has_key?('type') && value['type'].include?('null') && (value.has_key?('items') || value.has_key?('properties'))
-        attributes << build_attribute(schema, key, value)
+        attributes << build_attribute(schema, key, value, requiredProperty)
       end
 
       if value.has_key?('anyOf')
@@ -35,11 +39,28 @@
         end
 
         example = [*examples].map { |e| "`#{e.to_json}`" }.join(" or ")
-        attributes << [key, "string", description, example]
+        attributes << [key, "string", description, requiredProperty, example]
 
       # found a nested object
+      elsif key == 'relationships' && value['properties']
+        _, p = schema.dereference(value['properties'])
+
+        p.each do |key2, value2|
+          # found a reference to another element:
+          _, value2 = schema.dereference(value2)
+          # check if property is required
+          if value['required'].is_a?(Array)
+            requiredProperty = value['required'].include?(key2) ? 'x' : ''
+          end
+          temp = build_attribute(schema, 'relationships:'+key2, value2, requiredProperty)
+          temp[1] = 'array'
+          attributes << temp
+
+        end
+
+      # found a nested relationship
       elsif value['properties']
-        nested = extract_attributes(schema, value['properties'])
+        nested = extract_attributes(schema, value['properties'], value['required'])
         nested.each do |attribute|
           attribute[0] = "#{key}:#{attribute[0]}"
         end
@@ -47,7 +68,7 @@
 
       elsif array_with_nested_objects?(value['items'])
         if value['items']['properties']
-          nested = extract_attributes(schema, value['items']['properties'])
+          nested = extract_attributes(schema, value['items']['properties'], value['items']['required'])
           nested.each do |attribute|
             attribute[0] = "#{key}/#{attribute[0]}"
           end
@@ -57,7 +78,7 @@
           value['items']['oneOf'].each_with_index do |oneof, index|
           ref,  oneof_definition = schema.dereference(oneof)
           oneof_name = ref ? ref.split('/').last : index
-          nested = extract_attributes(schema, oneof_definition['properties'])
+          nested = extract_attributes(schema, oneof_definition['properties'], required)
           nested.each do |attribute|
             attribute[0] = "#{key}/[#{oneof_name.upcase}].#{attribute[0]}"
           end
@@ -67,14 +88,14 @@
 
       # just a regular attribute
       else
-        attributes << build_attribute(schema, key, value)
+        attributes << build_attribute(schema, key, value, requiredProperty)
       end
     end
-    attributes.map! { |key, type, description, example|
+    attributes.map! { |key, type, description, requiredProperty, example|
       if example.nil? && Prmd::DefaultExamples.key?(type)
         example = "`%s`" % Prmd::DefaultExamples[type].to_json
       end
-      [key, type, description, example]
+      [key, type, description, requiredProperty, example]
     }
     return attributes
   end
@@ -111,7 +132,7 @@
     ret
   end
 
-  def build_attribute(schema, key, value)
+  def build_attribute(schema, key, value, required)
     description = value['description'] || ""
     if value['default']
       description += "<br/> **default:** `#{value['default'].to_json}`"
@@ -175,7 +196,7 @@
       ''
     end
     type += (value['format'] || (value['type'] - ['null']).first)
-    [key, type, description, example]
+    [key, type, description, required, example]
   end
 
 

@@ -6,7 +6,11 @@
     schemata:        schemata
   })
 
-  title = schemata['title'].split(' - ', 2).last
+  if !schemata['title']
+    title = ''
+  else
+    title = schemata['title'].split(' - ', 2).last
+  end
 -%>
 <%- unless options[:doc][:disable_title_and_description] %>
 # <%= title %>
@@ -20,16 +24,16 @@ Stability: `<%= schemata['stability'] %>`
 
 <%- if schemata['properties'] && !schemata['properties'].empty? %>
 
-| Name | Type | Description | Example |
-| ------- | ------- | ------- | ------- |
+| Name | Type | Description | Required | Example |
+| ------- | ------- | ------- | ------- | ------- |
 <%- refs = extract_schemata_refs(schema, schemata['properties']).map {|v| v && v.split("/")} %>
-<%- extract_attributes(schema, schemata['properties']).each_with_index do |(key, type, description, example), i| %>
+<%- extract_attributes(schema, schemata['properties'], schemata['required']).each_with_index do |(key, type, description, required, example), i| %>
 <%- if refs[i] && refs[i][1] == "definitions" && refs[i][2] != resource %>
 <%- name = '[%s](#%s)' % [key, 'resource-' + refs[i][2]] %>
 <%- else %>
 <%- name = key %>
 <%- end %>
-| **<%= name %>** | *<%= type %>* | <%= description %> | <%= example %> |
+| **<%= name %>** | *<%= type %>* | <%= description %> | <%= required %> | <%= example %> |
 <%- end %>
 
 <%- end %>

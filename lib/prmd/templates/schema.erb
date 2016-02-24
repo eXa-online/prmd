@@ -1,18 +1,24 @@
 <%=
   schemata_template = Prmd::Template::load('schemata.md.erb', options[:template])
 
-  schema['properties'].map do |resource, property|
-    begin
-      _, schemata = schema.dereference(property)
-      schemata_template.result({
-        options:         options,
-        resource:        resource,
-        schema:          schema,
-        schemata:        schemata
-      })
-    rescue => e
-      $stdout.puts("Error in resource: #{resource}")
-      raise e
+    if (schema['properties'].length != 1 || schema['properties'].keys[0] != 'data')
+       insite = Hash["$schema" => schema['$schema'], "title" => schema['title'], "type" => schema['type'], "properties" => schema['properties'] ]
+       schema['properties'] = Hash["data" => insite]
     end
-  end.join("\n")
+
+
+    schema['properties'].map do |resource, property|
+      begin
+        _, schemata = schema.dereference(property)
+        schemata_template.result({
+          options:         options,
+          resource:        resource,
+          schema:          schema,
+          schemata:        schemata
+        })
+      rescue => e
+        $stdout.puts("Error in resource: #{resource}")
+        raise e
+      end
+    end.join("\n")
 %>
